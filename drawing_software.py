@@ -4,11 +4,17 @@ from PIL import Image, ImageChops
 import numpy
 import time
 
+def premultiply_alpha(img):
+    # fake transparent image to blend with
+    transparent = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    # blend with transparent image using own alpha
+    return Image.composite(img, transparent, img)
+
 
 class Paper(Entity):
     def __init__(self):
         super().__init__()
-
+        window.color = color.white
         self.name = 'paper'
         self.scale *= 7
         self.model = 'quad'
@@ -20,20 +26,44 @@ class Paper(Entity):
         self.i = 0
         # self.pressure = .1
 
-        self.brush = Image.open("brush.png").transpose(Image.FLIP_TOP_BOTTOM)
-        self.brush_color = color.white
-        self.brush_color = (
-            int(self.brush_color[0] * 255),
-            int(self.brush_color[1] * 255),
-            int(self.brush_color[2] * 255)
+        self.org_brush = Image.open('textures/' + 'round_pixelated.png').transpose(Image.FLIP_TOP_BOTTOM)
+        self.brush = self.org_brush.copy()
+        self.brush_color = color.lime
+
+        self.palette = Entity(
+            model = 'quad',
+            color = color.red,
+            parent = camera.ui,
+            position = (.4, .4),
+            collider = 'box'
+        )
+        self.palette.scale *= .1
+
+        self.cursor = Cursor()
+
+        self.new(2048*1, 1024*1)
+
+    @property
+    def brush_color(self):
+        return self._brush_color
+
+    @brush_color.setter
+    def brush_color(self, value):
+        self._brush_color = value
+        # self.brush_color = value
+        self.value = (
+            int(value[0] * 255),
+            int(value[1] * 255),
+            int(value[2] * 255)
             )
-        tint = Image.new("RGBA", (self.brush.width, self.brush.height), self.brush_color)
-        self.brush = ImageChops.multiply(self.brush, tint)
+        tint = Image.new("RGBA", (self.brush.width, self.brush.height), self.value)
+        self.brush = ImageChops.multiply(self.org_brush, tint)
 
         # self.slider = Slider()
 
-    def start(self):
-        self.new(2048*1, 1024*1)
+    # def start(self):
+
+
 
     def new(self, width=1920, height=1080):
         self.width = width
@@ -47,18 +77,19 @@ class Paper(Entity):
         self.texture_buffer.setRamImageAs(self.img.tobytes(), "RGBA")
         self.texture = self.texture_buffer
 
+        self.brush = premultiply_alpha(self.brush)
         self.img.paste(self.brush, (0, 0), self.brush)
         self.texture.setRamImageAs(self.img.tobytes(), "RGBA")
-        self.brush = self.brush.resize(
-            (int(self.brush.width * 2),
-            int(self.brush.height * 2)),
-            Image.ANTIALIAS)
 
-        self.texture.setRenderToTexture(True)
 
     def input(self, key):
+        if key == 'left mouse down':
+            self.undo_img = self.img.copy()
+            # print('start stroke', self.undo_img)
+
         if key == 'left mouse up':
             self.prev_pos = None
+            # print('end stroke')
 
         if key == 'scroll up':
             camera.fov -= 1
@@ -68,16 +99,37 @@ class Paper(Entity):
             camera.fov += 1
             camera.fov = min(camera.fov, 200)
 
+        if held_keys['control'] and key == 'z':
+            # print('undo')
+            if self.undo_img:
+                self.img = self.undo_img
+                b = self.img.tobytes()
+                self.texture_buffer.setRamImage(b)
+                self.texture = self.texture_buffer
+
 
     def update(self, dt):
         # if mouse.left and self. pressure < 2:
         #     self.pressure += .1
+        if mouse.left and held_keys['alt']:
+            if mouse.hovered_entity == self:
+                self.tex_x = int((mouse.point[0] + .5) * self.width)
+                self.tex_y = int((mouse.point[1] + .5) * self.height)
+                self.brush_color = self.img.getpixel((self.tex_x, self.tex_y))
+                self.cursor.color = self.brush_color
+
+            elif mouse.hovered_entity:
+                self.brush_color = mouse.hovered_entity.color
+
+            else:
+                self.brush_color = window.color
+            return
 
         if held_keys['space']:
             camera.x -= mouse.velocity[0] * 10
             camera.y -= mouse.velocity[1] * 10
 
-        if mouse.left and mouse.point:
+        if self.hovered and mouse.left and mouse.point:
             self.tex_x = int((mouse.point[0] + .5) * self.width)
             self.tex_y = int((mouse.point[1] + .5) * self.height)
             self.prev_point = (self.tex_x, self.tex_y)
@@ -117,6 +169,6 @@ class Paper(Entity):
 app = PandaEditor()
 camera.orthographic = True
 camera.fov = 16
-cursor = Cursor()
+
 paper = Paper()
 app.run()
