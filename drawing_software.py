@@ -1,4 +1,4 @@
-from pandaeditor import *
+from ursina import *
 from PIL import Image, ImageChops
 # import opencv-python as ocv
 import numpy
@@ -13,7 +13,7 @@ def premultiply_alpha(img):
     # blend with transparent image using own alpha
     return Image.composite(img, transparent, img)
 
-class Otoblop(PandaEditor):
+class Otoblop(Ursina):
     def __init__(self):
         super().__init__()
 

@@ -1,5 +1,5 @@
-from pandaeditor import *
-from pandaeditor.color import *
+from ursina import *
+from ursina.color import *
 
 class Palette(Entity):
     def __init__(self):

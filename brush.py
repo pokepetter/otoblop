@@ -1,4 +1,4 @@
-from pandaeditor import *
+from ursina import *
 from PIL import Image, ImageChops
 
 
