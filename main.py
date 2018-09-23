@@ -79,7 +79,7 @@ class Canvas(Entity):
         self.height = height
         self.scale_x *= width/height
 
-        self.img = Image.new('RGBA', (width, height), (255, 255, 255))
+        self.img = Image.new('RGBA', (width, height), (255, 255, 255, 255))
 
         self.texture_buffer = Texture()
         self.texture_buffer.setup2dTexture(width, height, Texture.TUnsignedByte, Texture.FRgba)
@@ -109,7 +109,7 @@ class Canvas(Entity):
                 self.texture = self.texture_buffer
 
 
-    def update(self, dt):
+    def update(self):
 
         if held_keys['space']:
             camera.x -= mouse.velocity[0] * 10
@@ -123,6 +123,7 @@ class Canvas(Entity):
             self.texture_buffer.setRamImage(b)
             self.texture = self.texture_buffer
             self.i = 0
+
 
 app = Otoblop()
 app.run()

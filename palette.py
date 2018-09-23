@@ -19,8 +19,7 @@ class Palette(Entity):
                 color = c,
                 )
 
-        self.add_script('grid_layout')
-        self.grid_layout.update_grid()
+        grid_layout(self.children)
         self.scale *= .05
 
 
