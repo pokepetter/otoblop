@@ -7,7 +7,7 @@ class Brush(Entity):
     def __init__(self):
         super().__init__()
         self.i = 0
-        self.org_brush = Image.open("textures/" + "round.png").transpose(
+        self.org_brush = Image.open("textures/" + "pokebrush_64.png").transpose(
             Image.FLIP_TOP_BOTTOM
         )
         # convert to brg color
@@ -24,21 +24,17 @@ class Brush(Entity):
 
         self.brush = self.org_brush.copy()
         self.brush_color = color.black33
+        # self.spacing = 64
+        self.spacing = 2
 
         self.temp_image = Image.new(
-            "RGBA", (base.canvas.img.width, base.canvas.img.height), (0, 0, 0, 0)
+            "RGBA", (base.canvas.width, base.canvas.height), (0, 0, 0, 0)
         )
         self.temp_layer = Entity(
-            parent=base.canvas, model="quad", z=-1, color=(1, 1, 1, .5)
+            # parent=base.canvas, model="quad", z=-1, color=(1, 1, 1, .5)
+            parent=base.canvas, model="quad", z=-1, color=(1, 1, 1, 1)
         )
-        self.temp_texture = Texture()
-        self.temp_texture._texture.setup2dTexture(
-            self.temp_image.width,
-            self.temp_image.height,
-            PandaTexture.TUnsignedByte,
-            PandaTexture.FRgba,
-        )
-        self.temp_texture._texture.setRamImageAs(self.temp_image.tobytes(), "RGBA")
+        self.temp_texture = Texture(self.temp_image)
         self.temp_layer.texture = self.temp_texture
 
     @property
@@ -60,18 +56,19 @@ class Brush(Entity):
     def input(self, key):
         if key == "left mouse down":
             self.temp_image = Image.new(
-                "RGBA", (base.canvas.img.width, base.canvas.img.height), (0, 0, 0, 0)
+                "RGBA", (base.canvas.width, base.canvas.height), (0, 0, 0, 0)
             )
             self.temp_layer.visible = True
             self.stamp(self.get_canvas_position())
 
         if key == "left mouse up":
             # apply stroke
-            self.temp_image = Image.eval(self.temp_image, lambda x: x / 2)
-            base.canvas.img = Image.alpha_composite(base.canvas.img, self.temp_image)
+            # self.temp_image = Image.eval(self.temp_image, lambda x: x / 2)
+            self.temp_image = Image.eval(self.temp_image, lambda x: x / 1)
+            base.canvas.current_layer._cached_image = Image.alpha_composite(base.canvas.current_layer._cached_image, self.temp_image)
             self.temp_layer.visible = False
             self.temp_image = Image.new(
-                "RGBA", (base.canvas.img.width, base.canvas.img.height), (0, 0, 0, 0)
+                "RGBA", (base.canvas.width, base.canvas.height), (0, 0, 0, 0)
             )
 
         if key == "f":
@@ -97,7 +94,7 @@ class Brush(Entity):
     def stamp(self, position):
         if not position:
             return
-            
+
         stamp_pos = (int(position[0] - (self.brush.size[0] / 2)), int(position[1] - (self.brush.size[1] / 2)))
         try:
             self.temp_image.alpha_composite(self.brush, stamp_pos)
@@ -115,8 +112,8 @@ class Brush(Entity):
         self.last_drawn_point = position
 
 
-    def draw_line(self, start_pos, end_pos, spacing=64):
-        amount = int(distance(start_pos, end_pos) / spacing)
+    def draw_line(self, start_pos, end_pos):
+        amount = int(distance(start_pos, end_pos) / self.spacing)
         for i in range(1, amount):  # start at 1 to skip the first point
             position = lerp(start_pos, end_pos, i / amount)
             self.stamp(position)
@@ -130,14 +127,11 @@ class Brush(Entity):
             self.draw_line(
                 self.last_drawn_point,
                 self.get_canvas_position(),
-                spacing=self.brush.width * .1,
             )
-            # if self.i < 10:
-            #     return
 
             if time.dt <= 1 / 60:
                 self.temp_texture._texture.setRamImageAs(
-                    self.temp_image.tobytes(), "RGBA"
+                    self.temp_image.tobytes(), "BGRA"
                 )
                 self.temp_layer.texture = self.temp_texture
                 self.i = 0
