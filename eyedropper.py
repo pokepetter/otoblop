@@ -7,10 +7,10 @@ class Eyedropper(Entity):
         #     self.pressure += .1
         if mouse.left:
             print('pick color')
-            if mouse.hovered_entity == base.canvas:
-                self.tex_x = int((mouse.point[0] + .5) * base.canvas.width)
-                self.tex_y = int((mouse.point[1] + .5) * base.canvas.height)
-                base.brush.brush_color = base.canvas.img.getpixel((self.tex_x, self.tex_y))
+            if mouse.hovered_entity == base.layer:
+                self.tex_x = int((mouse.point[0] + .5) * base.layer.width)
+                self.tex_y = int((mouse.point[1] + .5) * base.layer.height)
+                base.brush.brush_color = base.layer.img.getpixel((self.tex_x, self.tex_y))
                 base.cursor.color = base.brush.brush_color
 
             elif mouse.hovered_entity:
