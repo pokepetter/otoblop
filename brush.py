@@ -4,45 +4,46 @@ from panda3d.core import Texture as PandaTexture
 
 
 class Brush(Entity):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
         self.i = 0
-        # self.org_brush = Image.open("textures/" + "pokebrush_64.png").transpose(
-        self.org_brush = Image.open("textures/" + "round.png").transpose(
-            Image.FLIP_TOP_BOTTOM
-        )
-        # convert to brg color
-        channels = self.org_brush.split()
-        printvar(len(channels))
-        if len(channels) == 3:
-            self.org_brush = Image.merge(
-                "RGBA", (channels[2], channels[1], channels[0], 255)
-            )
-        else:
-            self.org_brush = Image.merge(
-                "RGBA", (channels[2], channels[1], channels[0], channels[3])
-            )
+        self._delta_times = (0,0,0,0)
 
-        self.brush = self.org_brush.copy()
-        self.brush_color = color.black33
+        self.brush = 'round'
+        self.brush_color = color.black
         self.opacity = 1
-        # self.spacing = 64
-        self.spacing = 3
-        self.spacing = 10
-        # self.spacing = 10     # bette default for round brush
+        self.spacing = 2
+        # self.spacing = 6     # better default for round brush
+        # self.spacing = 25     # better default for round brush
         self.size = 1
-        self.smoothing = .1
-        mouse.visible=True
+        # self.size = .05
+        # self.smoothing = .1
+        self.smoothing = 1
+        mouse.visible = True
 
-        self.temp_image = Image.new(
-            "RGBA", (base.layer.width, base.layer.height), (0, 0, 0, 0)
-        )
-        self.temp_layer = Entity(
-            # parent=base.layer, model="quad", z=-1, color=(1, 1, 1, .5)
-            parent=base.layer, model="quad", z=-1, color=(1, 1, 1, self.opacity)
-        )
+        self.temp_image = Image.new('RGBA', (self.parent.canvas_width, self.parent.canvas_height), (0, 0, 0, 0))
+        self.temp_layer = Entity(parent=self.parent.current_layer, model='quad', z=-.1, color=(1, 1, 1, self.opacity))
         self.temp_texture = Texture(self.temp_image)
         self.temp_layer.texture = self.temp_texture
+
+    @property
+    def brush(self):
+        return self._brush
+
+    @brush.setter
+    def brush(self, value):
+        # self.org_brush = Image.open('textures/' + 'pokebrush_64.png').transpose(
+        self.org_brush = Image.open(f'textures/{value}.png').transpose(Image.FLIP_TOP_BOTTOM)
+        # convert to brg color
+        channels = self.org_brush.split()
+        if len(channels) == 3:
+            self.org_brush = Image.merge('RGBA', (channels[2], channels[1], channels[0], 255))
+        else:
+            self.org_brush = Image.merge('RGBA', (channels[2], channels[1], channels[0], channels[3]))
+
+        self._brush = self.org_brush.copy()
+        self.brush_color = self.brush_color
 
     @property
     def brush_color(self):
@@ -52,8 +53,8 @@ class Brush(Entity):
     def brush_color(self, value):
         self._brush_color = value
         self.value = (int(value[2] * 255), int(value[1] * 255), int(value[0] * 255))
-        tint = Image.new("RGBA", (self.brush.width, self.brush.height), self.value)
-        self.brush = ImageChops.multiply(self.org_brush, tint)
+        tint = Image.new('RGBA', (self.brush.width, self.brush.height), self.value)
+        self._brush = ImageChops.multiply(self.org_brush, tint)
         self.size = self.size
 
 
@@ -65,60 +66,78 @@ class Brush(Entity):
     def size(self, value):
         self._size = value
         size = (int(self.org_brush.width * value), int(self.org_brush.height * value))
-        self.brush = self.org_brush.resize(size, Image.ANTIALIAS)
+        self._brush = self.org_brush.resize(size, Image.ANTIALIAS)
 
         # reapply tint
         color = (int(self.color[2] * 255), int(self.color[1] * 255), int(self.color[0] * 255))
-        tint = Image.new("RGBA", (self.brush.width, self.brush.height), self.value)
-        self.brush = ImageChops.multiply(self.brush, tint)
+        tint = Image.new('RGBA', (self.brush.width, self.brush.height), self.value)
+        self._brush = ImageChops.multiply(self.brush, tint)
         print(value * self.brush.height, 'px')
+        self.parent.cursor.scale = value / 20
 
 
     def input(self, key):
-        if key == "left mouse down":
+        if key == 'left mouse down':
             self.temp_image = Image.new(
-                "RGBA", (base.layer.width, base.layer.height), (0, 0, 0, 0)
+                'RGBA', (self.parent.canvas_width, self.parent.canvas_height), (0, 0, 0, 0)
             )
             self.temp_layer.visible = True
             self.last_drawn_point = self.get_layer_position()
             self.stamp(self.get_layer_position())
+            self.original_size = self.size
 
-        if key == "left mouse up":
+        if key == 'left mouse up':
             # apply stroke
-            self.temp_image = Image.alpha_composite(base.layer.img, self.temp_image)
-            base.layer.img = Image.blend(base.layer.img, self.temp_image, alpha=self.opacity)
+            self.temp_image = Image.alpha_composite(self.parent.current_layer.img, self.temp_image)
+            self.parent.current_layer.img = Image.blend(self.parent.current_layer.img, self.temp_image, alpha=self.opacity)
 
             self.temp_layer.visible = False
-            self.temp_image = Image.new("RGBA", (base.layer.width, base.layer.height), (0, 0, 0, 0))
+            self.temp_image = Image.new('RGBA', (self.parent.canvas_width, self.parent.canvas_height), (0, 0, 0, 0))
             # render layer
-            base.layer.texture._texture.setRamImage(base.layer.img.tobytes())
+            self.parent.current_layer.texture._texture.setRamImage(self.parent.current_layer.img.tobytes())
+            self.size = self.original_size
 
-        if key == "f":
+        if key == 'f':
             print(mouse.hovered_entity)
-            # self.line_start = (int((mouse.point[0] + .5) * base.layer.width), int((mouse.point[1] + .5) * base.layer.height), 0)
-        if key == "f up":
-            print("draw line")
-            # self.draw_line(self.line_start, (int((mouse.point[0] + .5) * base.layer.width), int((mouse.point[1] + .5) * base.layer.height), 0))
+            # self.line_start = (int((mouse.point[0] + .5) * self.parent.layer.width), int((mouse.point[1] + .5) * self.parent.layer.height), 0)
+        if key == 'f up':
+            print('draw line')
+            # self.draw_line(self.line_start, (int((mouse.point[0] + .5) * self.parent.layer.width), int((mouse.point[1] + .5) * self.parent.layer.height), 0))
 
         if key.isdigit():
-            if key == "0":
-                key = "10"
+            if key == '0':
+                key = '10'
             self.opacity = int(key) / 10
             self.temp_layer.color = color.color(0,0,1,self.opacity)
             printvar(self.opacity)
 
-        if key == '+':
+        if key in ('+', '+ hold') or key == 'scroll up' and mouse.left:
             self.size *= 1.2
-        if key == '-':
+        if key in ('-', '- hold') or key == 'scroll down' and mouse.left:
             self.size /= 1.2
+
+        if key == 'r':
+            self.brush = 'round'
+            # self.spacing = 6
+        if key == 'p':
+            self.brush = 'pokebrush_64'
+            # self.spacing = 2
+        if key == 'arrow right':
+            self.spacing += 1
+        if key == 'arrow left':
+            self.spacing -= 1
+            self.spacing = max(0, self.spacing)
+
 
     def get_layer_position(self, smoothing=1):
         # returns pixel position
         # print(1)
-        if mouse.hovered_entity == base.layer:
+        # print(mouse.hovered_entity, self.parent.current_layer)
+        if mouse.hovered_entity == self.parent.current_layer:
             pos = (mouse.point) + Vec3(.5, .5, 0)
-            pos = (pos[0] * base.layer.width, pos[1] * base.layer.height)
+            pos = (pos[0] * self.parent.canvas_width, pos[1] * self.parent.canvas_height)
             pos = (int(pos[0]), int(pos[1]), 0)
+            # print(pos)
             if hasattr(self, 'prev_pos') and smoothing < 1:
                 newpos = lerp(self.prev_pos, pos, smoothing)
                 self.prev_pos = newpos
@@ -126,6 +145,8 @@ class Brush(Entity):
 
             self.prev_pos = pos
             return pos
+
+        return None
 
     def stamp(self, position):
         if not position:
@@ -135,7 +156,7 @@ class Brush(Entity):
         try:
             self.temp_image.alpha_composite(self.brush, stamp_pos)
         except:
-            cropped_brush = self.brush.crop((
+            cropped_brush = self._brush.crop((
                 -stamp_pos[0], -stamp_pos[1],
                 self.brush.width, self.brush.height)
             )
@@ -156,14 +177,18 @@ class Brush(Entity):
 
 
     def update(self):
+
         self.i += time.dt
-        if mouse.hovered_entity == base.layer and mouse.left and mouse.point:
+        if mouse.hovered_entity == self.parent.current_layer and mouse.left and mouse.point and self.last_drawn_point != None:
             self.draw_line(self.last_drawn_point, self.get_layer_position(self.smoothing))
 
             # render temp texture
-            if time.dt <= 1 / 240:
+            # if time.dt <= 1 / 240 / 1.95:
+            self._delta_times = self._delta_times[:3] + (time.dt,)
+            # print(self._delta_times)
+
+            # if sum(self._delta_times) <= .03:
+            # if sum(mouse.velocity) < .005:
             # if self.i > 32:
-                # self.temp_texture._texture.setRamImageAs(self.temp_image.tobytes(), "BGRA")
-                self.temp_texture._texture.setRamImage(self.temp_image.tobytes())
-                # self.temp_layer.texture = self.temp_texture
-                self.i = 0
+            self.temp_texture._texture.setRamImage(self.temp_image.tobytes())
+            self.i = 0

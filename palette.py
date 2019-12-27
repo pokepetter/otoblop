@@ -1,11 +1,14 @@
 from ursina import *
-# from ursina.color import *
+
+
 
 class Palette(Entity):
-    def __init__(self):
+    def __init__(self, brush):
         super().__init__()
         self.parent = camera.ui
         self.position = (.4, .4)
+
+        self.brush = brush
         # self.colors = (
         #     black, dark_gray, gray, light_gray, white,
         #     red, orange, yellow, lime,
@@ -32,4 +35,5 @@ class PaletteButton(Button):
     #     self.highlight_color = self.color
 
     def on_click(self):
-        base.brush.brush_color = self.color
+        print(self.parent.brush)
+        self.parent.brush.brush_color = self.color
