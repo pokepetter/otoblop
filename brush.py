@@ -22,10 +22,6 @@ class Brush(Entity):
         self.smoothing = 1
         mouse.visible = True
 
-        self.temp_image = Image.new('RGBA', (self.parent.canvas_width, self.parent.canvas_height), (0, 0, 0, 0))
-        self.temp_layer = Entity(parent=self.parent.current_layer, model='quad', z=-.1, color=(1, 1, 1, self.opacity))
-        self.temp_texture = Texture(self.temp_image)
-        self.temp_layer.texture = self.temp_texture
 
     @property
     def brush(self):
@@ -72,27 +68,27 @@ class Brush(Entity):
         color = (int(self.color[2] * 255), int(self.color[1] * 255), int(self.color[0] * 255))
         tint = Image.new('RGBA', (self.brush.width, self.brush.height), self.value)
         self._brush = ImageChops.multiply(self.brush, tint)
-        print(value * self.brush.height, 'px')
+        # print(value * self.brush.height, 'px')
         self.parent.cursor.scale = value / 20
 
 
     def input(self, key):
         if key == 'left mouse down':
-            self.temp_image = Image.new(
+            self.parent.temp_image = Image.new(
                 'RGBA', (self.parent.canvas_width, self.parent.canvas_height), (0, 0, 0, 0)
             )
-            self.temp_layer.visible = True
+            self.parent.temp_layer.visible = True
             self.last_drawn_point = self.get_layer_position()
             self.stamp(self.get_layer_position())
             self.original_size = self.size
 
         if key == 'left mouse up':
             # apply stroke
-            self.temp_image = Image.alpha_composite(self.parent.current_layer.img, self.temp_image)
-            self.parent.current_layer.img = Image.blend(self.parent.current_layer.img, self.temp_image, alpha=self.opacity)
+            self.parent.temp_image = Image.alpha_composite(self.parent.current_layer.img, self.parent.temp_image)
+            self.parent.current_layer.img = Image.blend(self.parent.current_layer.img, self.parent.temp_image, alpha=self.opacity)
 
-            self.temp_layer.visible = False
-            self.temp_image = Image.new('RGBA', (self.parent.canvas_width, self.parent.canvas_height), (0, 0, 0, 0))
+            self.parent.temp_layer.visible = False
+            self.parent.temp_image = Image.new('RGBA', (self.parent.canvas_width, self.parent.canvas_height), (0, 0, 0, 0))
             # render layer
             self.parent.current_layer.texture._texture.setRamImage(self.parent.current_layer.img.tobytes())
             self.size = self.original_size
@@ -108,7 +104,7 @@ class Brush(Entity):
             if key == '0':
                 key = '10'
             self.opacity = int(key) / 10
-            self.temp_layer.color = color.color(0,0,1,self.opacity)
+            self.parent.temp_layer.color = color.color(0,0,1,self.opacity)
             printvar(self.opacity)
 
         if key in ('+', '+ hold') or key == 'scroll up' and mouse.left:
@@ -154,7 +150,7 @@ class Brush(Entity):
 
         stamp_pos = (int(position[0] - (self.brush.size[0] / 2)), int(position[1] - (self.brush.size[1] / 2)))
         try:
-            self.temp_image.alpha_composite(self.brush, stamp_pos)
+            self.parent.temp_image.alpha_composite(self.brush, stamp_pos)
         except:
             cropped_brush = self._brush.crop((
                 -stamp_pos[0], -stamp_pos[1],
@@ -164,7 +160,7 @@ class Brush(Entity):
                 max(int(position[0] - cropped_brush.width), 0) // 10,
                 max(int(position[1] - cropped_brush.height), 0) // 10
                 )
-            self.temp_image.alpha_composite(cropped_brush, stamp_pos)
+            self.parent.temp_image.alpha_composite(cropped_brush, stamp_pos)
 
         self.last_drawn_point = position
 
@@ -190,5 +186,5 @@ class Brush(Entity):
             # if sum(self._delta_times) <= .03:
             # if sum(mouse.velocity) < .005:
             # if self.i > 32:
-            self.temp_texture._texture.setRamImage(self.temp_image.tobytes())
+            self.parent.temp_texture._texture.setRamImage(self.parent.temp_image.tobytes())
             self.i = 0

@@ -9,7 +9,7 @@ from ursina.prefabs.file_browser_save import FileBrowserSave
 
 from brush import Brush
 # from move_tool import MoveTool
-# from eyedropper import Eyedropper
+from eyedropper import Eyedropper
 from palette import Palette
 from layer import Layer
 from layer_menu import LayerMenu
@@ -28,7 +28,6 @@ Button.color = color.color(0,0,0,.9)
 class Otoblop(Entity):
     def __init__(self):
         super().__init__()
-
         camera.orthographic = True
         camera.fov = 100
         window.color = color.white
@@ -36,18 +35,23 @@ class Otoblop(Entity):
 
         self.canvas_width = 1920
         self.canvas_height = 1080
-        # self.layer = Layer(512, 512)
-        # self.layer = Layer(self.canvas_width, self.canvas_height)
-        # self.layer_2 = Layer(self.canvas_width, self.canvas_height, z=-1)
-        # self.layers = [self.layer, self.layer_2]
+
+        # create layer for displaying brush stroke while drawing
+        self.temp_image = Image.new('RGBA', (self.canvas_width, self.canvas_height), (0, 0, 0, 0))
+        self.temp_layer = Entity(parent=self, model='quad', z=-.1, color=(1, 1, 1, 1))
+        self.temp_texture = Texture(self.temp_image)
+        self.temp_layer.texture = self.temp_texture
+
+        self.bg_layer = Layer(self.canvas_width, self.canvas_height, color.white, z=10, enabled=False)
+        self.combined_layer = Layer(self.canvas_width, self.canvas_height, z=-10, enabled=False)
+        self.combined_layer.outline.color = color.magenta
+
         self.layers = list()
         self.layer_index = -1
+        self.layer_index_label = Text(position=window.left, text='-1')
+        self.layer_menu = LayerMenu(otoblop=self)
         self.add_layer()
         self.add_layer()
-        # self.layer_menu = LayerMenu()
-        # self.layer_menu.otoblop = self
-        # self.layer_menu.add_layer()
-        print('---', self.layers, self.layer_index)
 
         self.cover = Entity(parent=self.current_layer, z=-1)
         Entity(parent=self.cover, model='quad', color=color.dark_gray, origin_y=-.5, y=.5, scale=10)
@@ -60,8 +64,7 @@ class Otoblop(Entity):
         # instantiate tools
         self.brush = Brush(parent=self)
         # self.move_tool = MoveTool(parent=self)
-        # self.eyedropper = Eyedropper(parent=self)
-
+        self.eyedropper = Eyedropper(parent=self)
         # self.tools = (self.brush, self.move_tool)
         self.active_tool = self.brush
 
@@ -112,38 +115,73 @@ class Otoblop(Entity):
     def layer_index(self, value):
         for l in self.layers:
             l.collision = False
+            l.outline.visible = False
 
         self._layer_index = value
         self.layers[value].collision = True
-        print('---', self.layers[value].collision)
-
-        self.brush.temp_layer.parent = self.layers[value]
+        self.layers[value].outline.visible = True
+        self.layer_index_label.text = self._layer_index
+        self.temp_layer.parent = self.layers[value]
 
 
     def add_layer(self):
-        self.layers.append(Layer(self.canvas_width, self.canvas_height))
+        new_layer = Layer(self.canvas_width, self.canvas_height)
+        new_layer_button = self.layer_menu.add_layer_button(self.layer_index+1, new_layer)
+        new_layer.layer_button = new_layer_button
         self.layer_index += 1
+        self.layers.insert(self.layer_index, new_layer)
 
         for i, l in enumerate(self.layers):
+            print(i, l)
             l.z = -i
+            l.layer_button.y = i
+
+        # higlight the current layer in the layer menu
+        for lb in self.layer_menu.layer_buttons:
+            lb.selected = False
+        self.layer_menu.layer_buttons[self.layer_index].selected = True
+        self.temp_layer.parent = new_layer
+
+        return new_layer
+
+
+    def move_layer(self, i, j):
+        layer_to_move = self.layers.pop(i)
+        self.layers.insert(j, layer_to_move)
+        for i, l in enumerate(self.layers):
+            l.z = -i
+            l.layer_button.y = i
 
 
     def input(self, key):
         # print('key:', key)
+        if key == 'f':
+            print([e.name for e in self.layers])
         if key == 'b':
             self.active_tool = self.brush
 
         if key == 'v':
             # self.active_tool = self.move_tool
-            self.layers[1].x += 10
+            self.current_layer.x += 10
             print('moved layer')
 
         if key == 'alt':
+            original_layer_index = self.layer_index
+            self.layer_index = len(self.layers)
+            self.bg_layer.enabled = True
+            self.combined_layer.img = self.flattened_image
+            # self.combined_layer.img.show()
+            self.combined_layer.texture._texture.setRamImage(self.combined_layer.img.tobytes())
+            self.combined_layer.enabled = True
+            self.layer_index = original_layer_index
+
             self.prev_tool = self.active_tool
-            self.active_tool = eyedropper
-            print('tyoo', self.active_tool)
+            self.active_tool = self.eyedropper
+            # print('tyoo', self.active_tool)
 
         if key == 'alt up':
+            self.bg_layer.enabled = False
+            self.combined_layer.enabled = False
             self.active_tool = self.prev_tool
 
         if held_keys['control'] and key == 'o':
@@ -154,6 +192,14 @@ class Otoblop(Entity):
             print('save')
             self.file_browser_save.enabled = True
 
+        if held_keys['control'] and held_keys['shift'] and key == 'e':
+            # create new layer with flattened image
+            layer = self.add_layer()
+            layer.img = self.flattened_image
+            layer.texture._texture.setRamImage(layer.img.tobytes())
+            layer.x += 20
+
+
         if held_keys['control'] and key == 'v':
             # paste
             image = ImageGrab.grabclipboard()
@@ -161,7 +207,6 @@ class Otoblop(Entity):
                 t = Image.new('RGBA', image.size)
                 t.putdata(image.getdata())
 
-                # print(img.size)
                 reference_image = Entity(
                     model='quad',
                     scale = (image.size[0]/1080*90, image.size[1]/1080*90),
@@ -176,10 +221,18 @@ class Otoblop(Entity):
                 if relative_scale > 1:
                     reference_image.scale /= relative_scale
 
-        if key == '1':
-            self.layer_index = 0
-        if key == '2':
-            self.layer_index = 1
+        if key == 'q':
+            for lb in self.layer_menu.layer_buttons:
+                lb.selected = False
+            self.layer_index = max(self.layer_index-1, 0)
+            self.layer_menu.layer_buttons[self.layer_index].selected = True
+
+        if key == 'e':
+            for lb in self.layer_menu.layer_buttons:
+                lb.selected = False
+            self.layer_index += 1
+            self.layer_index = min(self.layer_index, len(self.layers)-1)
+            self.layer_menu.layer_buttons[self.layer_index].selected = True
 
 
     def save(self):
@@ -191,7 +244,6 @@ class Otoblop(Entity):
         print('save:', p)
         if p.exists():
             print('overwrite', p.name, '?')
-            # self.close
             return
 
         else:
@@ -222,6 +274,17 @@ class Otoblop(Entity):
             self.layer.texture._texture.setRamImage(otoblop.layer.img.tobytes())
         # TODO: open multiple
 
+    @property
+    def flattened_image(self):
+        combined_image = Image.new('RGBA', (self.canvas_width, self.canvas_height), (0,0,0,0))
+        if self.bg_layer.enabled:
+            combined_image = self.bg_layer.img
+
+        for i in range(self.layer_index):
+            if self.layers[i].enabled:
+                combined_image.alpha_composite(self.layers[i].img)
+
+        return combined_image
 
 
     @property
@@ -247,13 +310,11 @@ if len(sys.argv) > 1 and sys.argv[1].endswith('.png'):
     otoblop.open(sys.argv[1])
 
 sys.modules['OTOBLOP'] = otoblop
-import eyedropper
 from color_sliders import ColorMenu
 color_menu = ColorMenu()
 
-otoblop.tools = (otoblop.brush, eyedropper)
+otoblop.tools = (otoblop.brush, otoblop.eyedropper)
 otoblop.active_tool = otoblop.brush
-# sys.modules['eyedropper'] = Eyedropper(parent=self)]
 # from ursina.prefabs.dropdown_menu import DropdownMenu
 # from ursina.prefabs.dropdown_menu import DropdownMenuButton as MenuButton
 #

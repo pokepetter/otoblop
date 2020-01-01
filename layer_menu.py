@@ -10,19 +10,20 @@ class LayerButton(Draggable):
         for key, value in kwargs.items():
             setattr(self, key, value)
 
+        self.origin_y = -.5
         self.z = -.1
         self.scale_y=.95
         self.text_entity.world_scale = 1
         self.text_entity.position = (-.5 + (.075*5), .5)
 
-        self.eye = Button(parent=self, model='quad', position=(-.5+.075, .5, -1), color=color.olive)
+        self.eye = Button(parent=self, model='quad', position=(-.5+.075, .5, -1), color=color.random_color())
         self.eye.world_scale = .5
         self.eye.on_click = 'self.color = self.color.invert()'
 
         self.selected = False
         self.prev_index = 0
 
-        self.debug_square = Entity(parent=camera.ui, model='quad', scale=.2, x=-.2, color=color.azure)
+        # self.debug_square = Entity(parent=camera.ui, model='quad', scale=.2, x=-.2, color=color.azure)
         # self.thumbnail = Button(parent=self, model='quad', color=color.azure, position=(-.5 + (.075*3), .5, -1))
         # self.thumbnail.world_scale = self.world_scale_y * 1
         # self.parent = render
@@ -45,18 +46,10 @@ class LayerButton(Draggable):
                 self.parent.selection.remove(self)
 
 
-    def input(self, key):
-        super().input(key)
-        if key == 'left mouse down' and mouse.hovered_entity not in self.parent.layers:
-            self.selected = False
-
 
     def on_click(self):
-        if not self.selected and not held_keys['control'] and not held_keys['shift']:
-            for layer in self.parent.selection:
-                layer.selected = False
-
-
+        for lb in self.parent.layer_buttons:
+            lb.selected = False
         # select range
         if held_keys['shift'] and self.parent.selection:
             start, end = int(self.parent.selection[-1].y), int(self.y)
@@ -65,9 +58,10 @@ class LayerButton(Draggable):
 
             # print('select range:', start, end)
             for i in range(start, end):
-                self.parent.layers[i].selected = True
+                self.parent.layer_buttons[i].selected = True
 
         self.selected = True
+        self.parent.otoblop.layer_index = self.parent.layer_buttons.index(self)
 
 
     def drag(self):
@@ -79,6 +73,7 @@ class LayerButton(Draggable):
         # print('move layer from:', self.original_index)
 
     def drop(self):
+        mouse.hold_duration = 0
 
         if abs(mouse.delta_drag[1]) < .05:
             if not held_keys['control'] and not held_keys['shift']:
@@ -86,42 +81,49 @@ class LayerButton(Draggable):
                     if not l == self:
                         l.selected = False
 
-            self.parent.render()
+            self.parent.sort_layer_buttons()
             return
 
         moved_layers = sorted(self.parent.selection, key=lambda x: x.prev_index)
 
         for i, l in enumerate(moved_layers):
-            self.parent.layers.remove(l)
+            self.parent.layer_buttons.remove(l)
 
-        layers_below = [l for l in self.parent.layers if l.y < self.parent.layer_move_indicator.y]
-        layers_above = [l for l in self.parent.layers if not l in layers_below]
-        self.parent.layers = layers_below + moved_layers + layers_above
-        self.parent.render()
+        layers_below = [l for l in self.parent.layer_buttons if l.y < self.parent.layer_move_indicator.y]
+        layers_above = [l for l in self.parent.layer_buttons if not l in layers_below]
+        self.parent.layer_buttons = layers_below + moved_layers + layers_above
+        self.parent.sort_layer_buttons()
 
         for i, j in zip([int(l.y) for l in moved_layers], [l.prev_index for l in moved_layers]):
-            print('move:', i, '->', j)
+            print('move layer:', i, '->', j)
+            # self.layer_buttons[i], self.layer_buttons[j] = self.layer_buttons[j], self.layer_buttons[i]
+            self.parent.otoblop.move_layer(i, j)
 
 
     def update(self):
-        super().update()
-        if self.dragging and abs(mouse.y-mouse.start_y) > .01:
-            self.parent.layer_move_indicator.enabled = True
+        if self.dragging:
+            mouse.hold_duration += time.dt
 
-            for layer in self.parent.layers:
-                if layer == self:
-                    continue
+        if mouse.hold_duration > .2:
+            super().update()
+            if self.dragging and abs(mouse.y-mouse.start_y) > .01:
+                self.parent.layer_move_indicator.enabled = True
 
-                layers_beneath = [l for l in self.parent.layers if l.y < self.y]
-                if layers_beneath:
-                    self.parent.layer_move_indicator.y = layers_beneath[-1].y + self.scale_y
+                for layer in self.parent.layer_buttons:
+                    if layer == self:
+                        continue
 
-                if self.y < self.parent.layers[0].y:
-                    self.parent.layer_move_indicator.y = self.parent.layers[0].y
+                    layers_beneath = [l for l in self.parent.layer_buttons if l.y < self.y]
+                    if layers_beneath:
+                        self.parent.layer_move_indicator.y = layers_beneath[-1].y + self.scale_y
+
+                    if self.y < self.parent.layer_buttons[0].y:
+                        self.parent.layer_move_indicator.y = self.parent.layer_buttons[0].y
+
 
 
 class LayerMenu(Entity):
-    def __init__(self):
+    def __init__(self, **kwargs):
         super().__init__(
             parent = camera.ui,
             scale = (.3, .05),
@@ -131,31 +133,37 @@ class LayerMenu(Entity):
         self.bg = Panel(parent=self, model='quad', scale_y=12, origin_y=-.5)
         self.layer_buttons = list()
         self.selection = list()
+        mouse.hold_duration = 0
         self.layer_move_indicator = Entity(
             parent=self, model='quad', color=color.orange, world_scale_y=.1, enabled=False, scale_x=1.05, z=-.2)
 
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 
-    def render(self):
+    def add_layer_button(self, y, layer):
+        print('add layer at:', y)
+        new_layer_button = LayerButton(parent=self, text=f'layer_{len(self.layer_buttons)}')
+        new_layer_button.connected_layer = layer
+        # self.layer_buttons.append(lb)
+        # for lb in self.layer_buttons:   # move layer buttons above up one step
+        #     if lb.y > y and not lb == new_layer_button:
+        #         lb.y += y
+        self.layer_buttons.insert(y, new_layer_button)
+        # self.sort_layer_buttons()
+        return new_layer_button
+
+
+    def sort_layer_buttons(self):
+        self.layer_buttons.sort(key=lambda x : x.connected_layer.z, reverse=True)
+        print('---', self.layer_buttons)
         for i, c in enumerate(self.layer_buttons):
             c.y = i
+            c.text = str(i)
 
         self.layer_move_indicator.enabled = False
 
 
     def input(self, key):
         if held_keys['control'] and held_keys['shift'] and key == 'n':
-            print('add layer')
-
-
-
-if __name__ == '__main__':
-    app = Ursina()
-    # lm = LayerMenu()
-    window.position += Vec2(100,0)
-    def input(key):
-        if key == '+':
-            lm.add_layer_button()
-        if key == '-':
-            lm.remove_layer_button()
-    app.run()
+            self.otoblop.add_layer()
