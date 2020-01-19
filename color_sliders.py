@@ -2,18 +2,18 @@ from ursina import *
 import brush
 
 
-class ColorMenu(Button):
+class ColorMenu(Entity):
     def __init__(self, **kwargs):
         super().__init__(
             parent=camera.ui,
-            # model='quad',
-            color=Button.color,
+            model='quad',
+            color=color.dark_gray.tint(-.1),
             origin=(.5,.5),
             collider='box',
             scale_x=.25,
             scale_y=.2,
             x=.5*camera.aspect_ratio,
-
+            y=.35,
             highlight_color=Button.color,
             pressed_color=Button.color,
             pressed_scale=1,
@@ -66,6 +66,7 @@ class ColorMenu(Button):
         self.mode_button = Button(parent=self, model=Circle(mode='line'), scale=(.1,.1), x=-.08, y=-.1-(0*.125), color=color.white)
         self.mode_button.world_scale = .25
         self.mode_button.on_click = self.toggle_mode
+        self.border = Entity(parent=self, model=Quad(segments=0, mode='line'), origin=self.origin, color=self.color.tint(-.1))
 
     def toggle_mode(self):
         if self.mode == 'rgb':

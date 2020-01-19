@@ -1,8 +1,9 @@
+import time
+
 from ursina import *
 import PIL
 from PIL import Image, ImageChops
 import numpy as np
-import time
 from panda3d.core import Texture as PandaTexture
 from ursina.prefabs.file_browser import FileBrowser
 from ursina.prefabs.file_browser_save import FileBrowserSave
@@ -10,6 +11,7 @@ from ursina.prefabs.file_browser_save import FileBrowserSave
 from brush import Brush
 # from move_tool import MoveTool
 from eyedropper import Eyedropper
+from color_sliders import ColorMenu
 from palette import Palette
 from layer import Layer
 from layer_menu import LayerMenu
@@ -25,6 +27,7 @@ input_handler.bind('d', '+')
 Button.color = color.color(0,0,0,.9)
 
 
+
 class Otoblop(Entity):
     def __init__(self):
         super().__init__()
@@ -37,6 +40,7 @@ class Otoblop(Entity):
         self.canvas_height = 1080
 
         # create layer for displaying brush stroke while drawing
+        t = time.time()
         self.temp_image = Image.new('RGBA', (self.canvas_width, self.canvas_height), (0, 0, 0, 0))
         self.temp_layer = Entity(parent=self, model='quad', z=-.1, color=(1, 1, 1, 1))
         self.temp_texture = Texture(self.temp_image)
@@ -45,12 +49,12 @@ class Otoblop(Entity):
         self.bg_layer = Layer(self.canvas_width, self.canvas_height, color.white, z=10, enabled=False)
         self.combined_layer = Layer(self.canvas_width, self.canvas_height, z=-10, enabled=False)
         self.combined_layer.outline.color = color.magenta
+        print('temp layer:', time.time() - t)
 
         self.layers = list()
         self.layer_index = -1
         self.layer_index_label = Text(position=window.left, text='-1')
         self.layer_menu = LayerMenu(otoblop=self)
-        self.add_layer()
         self.add_layer()
 
         self.cover = Entity(parent=self.current_layer, z=-1)
@@ -68,6 +72,7 @@ class Otoblop(Entity):
         # self.tools = (self.brush, self.move_tool)
         self.active_tool = self.brush
 
+        self.color_menu = ColorMenu()
         self.palette = Palette(self.brush)
 
         self.info_text = Text(
@@ -89,15 +94,15 @@ class Otoblop(Entity):
         self.move_cursor = Cursor(enabled=False)
         Text(parent=self.move_cursor, text='move', enabled=False)
 
-        self.file_browser = FileBrowser(file_types=('.png', ), enabled=False)
-        self.file_browser.on_submit = self.open
-        self.file_browser.on_enable = disable_brush
-        self.file_browser.on_disable = enable_brush
-
-        self.file_browser_save = FileBrowserSave(file_types=('.png', ), file_type='.png', enabled=False)
-        self.file_browser_save.save_button.on_click = self.save
-        self.file_browser_save.on_enable = disable_brush
-        self.file_browser_save.on_disable = enable_brush
+        # self.file_browser = FileBrowser(file_types=('.png', ), enabled=False)
+        # self.file_browser.on_submit = self.open
+        # self.file_browser.on_enable = disable_brush
+        # self.file_browser.on_disable = enable_brush
+        #
+        # self.file_browser_save = FileBrowserSave(file_types=('.png', ), file_type='.png', enabled=False)
+        # self.file_browser_save.save_button.on_click = self.save
+        # self.file_browser_save.on_enable = disable_brush
+        # self.file_browser_save.on_disable = enable_brush
 
 
     @property
@@ -126,20 +131,23 @@ class Otoblop(Entity):
 
     def add_layer(self):
         new_layer = Layer(self.canvas_width, self.canvas_height)
-        new_layer_button = self.layer_menu.add_layer_button(self.layer_index+1, new_layer)
-        new_layer.layer_button = new_layer_button
+        if hasattr(self, 'layer_menu'):
+            new_layer_button = self.layer_menu.add_layer_button(self.layer_index+1, new_layer)
+            new_layer.layer_button = new_layer_button
         self.layer_index += 1
         self.layers.insert(self.layer_index, new_layer)
 
         for i, l in enumerate(self.layers):
             print(i, l)
             l.z = -i
-            l.layer_button.y = i
+            if hasattr(self, 'layer_menu'):
+                l.layer_button.y = i
 
         # higlight the current layer in the layer menu
-        for lb in self.layer_menu.layer_buttons:
-            lb.selected = False
-        self.layer_menu.layer_buttons[self.layer_index].selected = True
+        if hasattr(self, 'layer_menu'):
+            for lb in self.layer_menu.layer_buttons:
+                lb.selected = False
+            self.layer_menu.layer_buttons[self.layer_index].selected = True
         self.temp_layer.parent = new_layer
 
         return new_layer
@@ -165,19 +173,16 @@ class Otoblop(Entity):
             self.current_layer.x += 10
             print('moved layer')
 
-        if key == 'alt':
+        if key == 'alt' and not self.brush.drawing:
+            self.prev_tool = self.active_tool
+            self.active_tool = self.eyedropper
             original_layer_index = self.layer_index
             self.layer_index = len(self.layers)
             self.bg_layer.enabled = True
             self.combined_layer.img = self.flattened_image
-            # self.combined_layer.img.show()
-            self.combined_layer.texture._texture.setRamImage(self.combined_layer.img.tobytes())
             self.combined_layer.enabled = True
             self.layer_index = original_layer_index
-
-            self.prev_tool = self.active_tool
-            self.active_tool = self.eyedropper
-            # print('tyoo', self.active_tool)
+            # print(self.active_tool)
 
         if key == 'alt up':
             self.bg_layer.enabled = False
@@ -196,7 +201,6 @@ class Otoblop(Entity):
             # create new layer with flattened image
             layer = self.add_layer()
             layer.img = self.flattened_image
-            layer.texture._texture.setRamImage(layer.img.tobytes())
             layer.x += 20
 
 
@@ -234,6 +238,19 @@ class Otoblop(Entity):
             self.layer_index = min(self.layer_index, len(self.layers)-1)
             self.layer_menu.layer_buttons[self.layer_index].selected = True
 
+        if key == 'f4':     # flip canvas horizontally
+            for l in self.layers:
+                l.img.transpose(PIL.Image.FLIP_LEFT_RIGHT)
+
+
+        if key == 'tab' and not held_keys['alt']:
+            # camera.ui.visible = not camera.ui.visible
+            # camera.ui.enabled = not camera.ui.enabled
+            for e in (self.layer_menu, self.color_menu, self.palette):
+                e.enabled = not e.enabled
+
+
+
 
     def save(self):
         file_name = self.file_browser_save.file_name_field.text_field.text
@@ -262,17 +279,14 @@ class Otoblop(Entity):
             self.file_browser_save.enabled = False
             print('saved:', p)
 
+
     def open(self, path):
-        print('||||||||||||', type(path), isinstance(path, (tuple, list)))
-        if not isinstance(path, (tuple, list)):
-            print('open file:', path)
-            self.layer.img = Image.open(path)
-            self.layer.texture._texture.setRamImage(otoblop.layer.img.tobytes())
-        else:
-            print('open file 2:', path[0])
-            self.layer.img = Image.open(path[0])
-            self.layer.texture._texture.setRamImage(otoblop.layer.img.tobytes())
+        print('open file:', path)
+        layer = self.add_layer()
+        layer.img = Image.open(path).transpose(Image.FLIP_TOP_BOTTOM).convert("RGBA")
+        layer.texture._texture.setRamImage(layer.img.tobytes())
         # TODO: open multiple
+
 
     @property
     def flattened_image(self):
@@ -303,20 +317,22 @@ class Otoblop(Entity):
 
 
 app = Ursina()
+t = time.time()
+window.fps_counter.enabled = False
 otoblop = Otoblop()
 app.otoblop = otoblop
 print('.....', sys.argv)
 if len(sys.argv) > 1 and sys.argv[1].endswith('.png'):
     otoblop.open(sys.argv[1])
 
-sys.modules['OTOBLOP'] = otoblop
-from color_sliders import ColorMenu
-color_menu = ColorMenu()
 
 otoblop.tools = (otoblop.brush, otoblop.eyedropper)
 otoblop.active_tool = otoblop.brush
+otoblop.open(Path('.')/'textures'/'eagle_pass.jpg')
+
 # from ursina.prefabs.dropdown_menu import DropdownMenu
 # from ursina.prefabs.dropdown_menu import DropdownMenuButton as MenuButton
+print(':', time.time()-t)
 #
 # DropdownMenu(
 #     text = 'File',
@@ -329,6 +345,7 @@ otoblop.active_tool = otoblop.brush
 #         MenuButton('Exit', on_click='application.quit'),
 #         )
 # )
-
+from ursina.prefabs.memory_counter import MemoryCounter
+MemoryCounter()
 
 app.run()

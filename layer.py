@@ -29,18 +29,19 @@ class Layer(Entity):
         self.texture.filtering = None
 
 
+
     def input(self, key):
         # if key == 'left mouse down':
         #     self.undo_img = self.img.copy()
 
-        if key == 'scroll up' and not mouse.left:
-            camera.fov /= 1.25
+        if key == 'scroll up' and not mouse.left and held_keys['alt']:
+            camera.fov /= 1.1
             camera.fov = max(camera.fov, 0)
             print(camera.fov)
 
-        if key == 'scroll down' and not mouse.left:
+        if key == 'scroll down' and not mouse.left and held_keys['alt']:
             prev_cam_fov = camera.fov
-            camera.fov *= 1.25
+            camera.fov *= 1.1
             camera.fov = min(camera.fov, 300)
             print(camera.fov)
             if prev_cam_fov < 200 and camera. fov >= 200:

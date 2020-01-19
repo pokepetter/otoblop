@@ -12,6 +12,9 @@ class Eyedropper(Entity):
             if mouse.hovered_entity == self.parent.combined_layer:
                 self.tex_x = int((mouse.point[0] + .5) * self.parent.canvas_width)
                 self.tex_y = int((mouse.point[1] + .5) * self.parent.canvas_height)
+                self.tex_x = clamp(self.tex_x, 0, self.parent.canvas_width-1)
+                self.tex_y = clamp(self.tex_y, 0, self.parent.canvas_height-1)
+                # print(self.tex_x, self.tex_y)
                 col = self.parent.combined_layer.img.getpixel((self.tex_x, self.tex_y))
                 self.parent.brush.brush_color = color.rgb(col[2], col[1], col[0]) # bgr to rgb
                 self.parent.cursor.color = self.parent.brush.brush_color
