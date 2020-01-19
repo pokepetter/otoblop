@@ -21,6 +21,14 @@ class Brush(Entity):
         # self.smoothing = .1
         self.smoothing = 1
         mouse.visible = True
+        self.drawing = False
+        self.last_drawn_point = None
+
+        self.smudge = True
+        self.smudge_strength = .99
+        self.paint_left = 1
+
+        # self.preview = Entity(parent=camera.ui, model='quad', texture=Texture(self.brush), scale=.2, position=window.top_left, origin=(-.5,.5))
 
 
     @property
@@ -29,8 +37,8 @@ class Brush(Entity):
 
     @brush.setter
     def brush(self, value):
-        # self.org_brush = Image.open('textures/' + 'pokebrush_64.png').transpose(
-        self.org_brush = Image.open(f'textures/{value}.png').transpose(Image.FLIP_TOP_BOTTOM)
+        if isinstance(value, str):
+            self.org_brush = Image.open(f'textures/{value}.png').transpose(Image.FLIP_TOP_BOTTOM).convert("RGBA")
         # convert to brg color
         channels = self.org_brush.split()
         if len(channels) == 3:
@@ -40,6 +48,7 @@ class Brush(Entity):
 
         self._brush = self.org_brush.copy()
         self.brush_color = self.brush_color
+        self.preview.texture._texture.setRamImage(self._brush.tobytes())
 
     @property
     def brush_color(self):
@@ -74,50 +83,86 @@ class Brush(Entity):
 
     def input(self, key):
         if key == 'left mouse down':
+            self.original_size = self.size
+            if self.smudge:
+                position = self.get_layer_position()
+                if not position:
+                    return
+
+                stamp_pos = (int(position[0] - (self.brush.size[0] / 2)), int(position[1] - (self.brush.size[1] / 2)))
+                self.smudge_img = self.parent.current_layer.img.crop((
+                    stamp_pos[0], stamp_pos[1],
+                    stamp_pos[0]+self.brush.width, stamp_pos[1]+self.brush.height))
+
+                try:
+                    self.smudge_img.putalpha(self.brush.split()[-1])
+                except:
+                    pass
+
+                self._brush = self.smudge_img
+                # self.preview.texture = Texture(self._brush)
+
+
+            self.drawing = True
             self.parent.temp_image = Image.new(
                 'RGBA', (self.parent.canvas_width, self.parent.canvas_height), (0, 0, 0, 0)
             )
             self.parent.temp_layer.visible = True
             self.last_drawn_point = self.get_layer_position()
             self.stamp(self.get_layer_position())
-            self.original_size = self.size
 
         if key == 'left mouse up':
             # apply stroke
             self.parent.temp_image = Image.alpha_composite(self.parent.current_layer.img, self.parent.temp_image)
-            self.parent.current_layer.img = Image.blend(self.parent.current_layer.img, self.parent.temp_image, alpha=self.opacity)
+
+            alpha = self.opacity
+            if self.smudge:
+                alpha = 1
+            self.parent.current_layer.img = Image.blend(self.parent.current_layer.img, self.parent.temp_image, alpha=alpha)
 
             self.parent.temp_layer.visible = False
             self.parent.temp_image = Image.new('RGBA', (self.parent.canvas_width, self.parent.canvas_height), (0, 0, 0, 0))
             # render layer
             self.parent.current_layer.texture._texture.setRamImage(self.parent.current_layer.img.tobytes())
             self.size = self.original_size
+            self.drawing = False
 
-        if key == 'f':
-            print(mouse.hovered_entity)
-            # self.line_start = (int((mouse.point[0] + .5) * self.parent.layer.width), int((mouse.point[1] + .5) * self.parent.layer.height), 0)
-        if key == 'f up':
-            print('draw line')
-            # self.draw_line(self.line_start, (int((mouse.point[0] + .5) * self.parent.layer.width), int((mouse.point[1] + .5) * self.parent.layer.height), 0))
 
         if key.isdigit():
-            if key == '0':
-                key = '10'
-            self.opacity = int(key) / 10
-            self.parent.temp_layer.color = color.color(0,0,1,self.opacity)
-            printvar(self.opacity)
+
+            if time.time() - self.time_since_prev_digit_input > .1:
+                if key == '0':
+                    key = '10'
+            else:
+                self.prev_digit_input += key
+                print('---')
+
+            value = int(key) / 100
+            # self.prev_digit_input = key
+            self.time_since_prev_digit_input = time.time()
+
+            if not self.smudge:
+                self.opacity = value
+                self.parent.temp_layer.color = color.color(0,0,1,self.opacity)
+            else:
+                self.smudge_strength = value
+            printvar(value)
 
         if key in ('+', '+ hold') or key == 'scroll up' and mouse.left:
             self.size *= 1.2
         if key in ('-', '- hold') or key == 'scroll down' and mouse.left:
             self.size /= 1.2
 
-        if key == 'r':
+        if key == 'b':
             self.brush = 'round'
+            self.smudge = False
             # self.spacing = 6
         if key == 'p':
             self.brush = 'pokebrush_64'
-            # self.spacing = 2
+            self.smudge = False
+        if key == 'r':
+            self.smudge = True
+            self.spacing = 1
         if key == 'arrow right':
             self.spacing += 1
         if key == 'arrow left':
@@ -149,8 +194,11 @@ class Brush(Entity):
             return
 
         stamp_pos = (int(position[0] - (self.brush.size[0] / 2)), int(position[1] - (self.brush.size[1] / 2)))
+
+
         try:
             self.parent.temp_image.alpha_composite(self.brush, stamp_pos)
+            # print('------------', self.brush)
         except:
             cropped_brush = self._brush.crop((
                 -stamp_pos[0], -stamp_pos[1],
@@ -161,6 +209,23 @@ class Brush(Entity):
                 max(int(position[1] - cropped_brush.height), 0) // 10
                 )
             self.parent.temp_image.alpha_composite(cropped_brush, stamp_pos)
+
+        if self.smudge:
+            if self.smudge_strength < 1:
+                img = self.parent.current_layer.img.crop((
+                    stamp_pos[0], stamp_pos[1],
+                    stamp_pos[0]+self.brush.width, stamp_pos[1]+self.brush.height))
+
+                try:
+                    img.putalpha(self.brush.split()[-1])
+                except:
+                    pass
+
+                self._brush = Image.blend(self._brush, img, alpha=1-self.smudge_strength)
+                self.smudge_img = img
+                # self.preview.texture = Texture(self.brush)
+                self.last_drawn_point = position
+                return
 
         self.last_drawn_point = position
 
@@ -175,7 +240,7 @@ class Brush(Entity):
     def update(self):
 
         self.i += time.dt
-        if mouse.hovered_entity == self.parent.current_layer and mouse.left and mouse.point and self.last_drawn_point != None:
+        if mouse.hovered_entity == self.parent.current_layer and mouse.left and mouse.point and self.last_drawn_point != None and not held_keys['alt']:
             self.draw_line(self.last_drawn_point, self.get_layer_position(self.smoothing))
 
             # render temp texture
